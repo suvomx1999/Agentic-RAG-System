@@ -2,19 +2,20 @@
 
 A production-grade, fully agentic Retrieval-Augmented Generation (RAG) system built with **LangGraph**, **FastAPI**, and **RAGAS**. This system intelligently analyzes queries, decides on retrieval strategies (using hybrid dense+sparse retrieval), scores and reranks documents, handles web search fallbacks, and features internal hallucination checks.
 
-Best of all, this repository is configured to run using **100% Free APIs** (Google Gemini API free tier, BAAI/bge-m3 local embeddings, and DuckDuckGo web search).
+Best of all, this repository is configured to run using **100% Free APIs** (Groq API free tier using Llama 3 models, BAAI/bge-m3 local embeddings, and DuckDuckGo web search).
 
 ---
 
 ## ✨ Key Features
 
 - **Agentic Workflow (LangGraph)**: Adaptive query routing, automatic query rewriting (HyDE, Step-back, Multi-query), and self-correction loops.
+- **Conversation Memory**: Stateful chat history management allowing for multi-turn conversations and follow-up questions.
 - **Hybrid Retrieval**: Combines **ChromaDB** (Dense Vector) and **BM25** (Sparse Keyword) using Reciprocal Rank Fusion (RRF).
 - **Cross-Encoder Reranking**: Uses `ms-marco-MiniLM-L-6-v2` for precise query-document relevance scoring.
-- **LLM-Based Grading**: Gemini-powered document relevance grading, answer quality grading, and hallucination detection.
+- **LLM-Based Grading**: Groq-powered (Llama 3) document relevance grading, answer quality grading, and hallucination detection.
 - **Web Search Fallback**: Automatically searches the web (DuckDuckGo) when the local knowledge base is insufficient.
 - **RAGAS Evaluation Framework**: Built-in 6-metric evaluation pipeline for dataset generation and quality assessment.
-- **Modern UI**: A premium, glassmorphic frontend out of the box.
+- **Modern UI**: A premium, glassmorphic frontend with expandable chunk previews for source explainability.
 
 ---
 
@@ -22,7 +23,7 @@ Best of all, this repository is configured to run using **100% Free APIs** (Goog
 
 ### 1. Requirements
 - Python 3.11+
-- A free Google Gemini API Key: Get it at [Google AI Studio](https://aistudio.google.com/)
+- A free Groq API Key: Get it at [Groq Console](https://console.groq.com/)
 
 ### 2. Installation
 Clone the repository, set up your virtual environment, and install dependencies:
@@ -37,7 +38,7 @@ pip install -r requirements.txt
 Copy the environment template and insert your API key:
 ```bash
 cp .env.example .env
-# Open .env and replace `your-google-api-key-here` with your actual key
+# Open .env and replace `your-groq-api-key-here` with your actual key
 ```
 
 ### 4. Run the Application
