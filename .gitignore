@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+chroma_db/
+bm25_store/
+agentic_rag/evaluator/eval_dataset.json
+agentic_rag/evaluator/responses_cache.json
+agentic_rag/evaluator/results_*.json
+*.log
