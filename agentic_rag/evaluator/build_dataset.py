@@ -1,6 +1,6 @@
 """Build RAGAS evaluation dataset from indexed corpus.
 
-Generates 60 QA pairs (50 answerable + 10 unanswerable) using Gemini,
+Generates 60 QA pairs (50 answerable + 10 unanswerable) using Groq,
 categorized by question type: factual, multi-hop, reasoning, unanswerable.
 """
 
@@ -12,11 +12,11 @@ from pathlib import Path
 from typing import List, Optional
 
 from langchain_core.documents import Document
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 from tqdm import tqdm
 
-from agentic_rag.config import GOOGLE_API_KEY, LLM_MODEL
+from agentic_rag.config import GROQ_API_KEY, LLM_MODEL
 
 EVAL_DATASET_PATH = Path(__file__).parent / "eval_dataset.json"
 
@@ -34,10 +34,10 @@ a niche implementation detail, or require real-time data. Output ONLY a JSON obj
 "context": "", "type": "unanswerable"}. No other text."""
 
 
-def _get_llm() -> ChatGoogleGenerativeAI:
-    return ChatGoogleGenerativeAI(
+def _get_llm() -> ChatGroq:
+    return ChatGroq(
         model=LLM_MODEL,
-        google_api_key=GOOGLE_API_KEY,
+        api_key=GROQ_API_KEY,
         temperature=0.7,
     )
 

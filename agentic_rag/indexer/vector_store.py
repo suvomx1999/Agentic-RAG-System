@@ -62,6 +62,8 @@ def build_index(chunks: List[Document]) -> None:
 
     # Prepare data in batches (ChromaDB recommends batches of ~5000)
     batch_size = 500
+    current_count = collection.count()
+    
     for start in range(0, len(chunks), batch_size):
         batch = chunks[start:start + batch_size]
         texts = [c.page_content for c in batch]
@@ -69,7 +71,7 @@ def build_index(chunks: List[Document]) -> None:
             {k: str(v) for k, v in c.metadata.items()}
             for c in batch
         ]
-        ids = [f"chunk_{start + i}" for i in range(len(batch))]
+        ids = [f"chunk_{current_count + start + i}" for i in range(len(batch))]
         embeddings = embedder.embed_documents(texts)
 
         collection.upsert(
@@ -79,7 +81,7 @@ def build_index(chunks: List[Document]) -> None:
             metadatas=metadatas,
         )
 
-    print(f"✅ Indexed {collection.count()} chunks in ChromaDB")
+    print(f"✅ Indexed {len(chunks)} chunks in ChromaDB (Total: {collection.count()})")
 
 
 def load_index():

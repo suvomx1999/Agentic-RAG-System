@@ -1,6 +1,6 @@
 """LLM-based relevance grader for retrieved documents.
 
-Uses Gemini to evaluate whether each document is relevant to the query.
+Uses Groq to evaluate whether each document is relevant to the query.
 Supports async batch grading for concurrent evaluation.
 """
 
@@ -11,21 +11,21 @@ import json
 from typing import List, Tuple
 
 from langchain_core.documents import Document
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from agentic_rag.config import GOOGLE_API_KEY, LLM_MODEL
+from agentic_rag.config import GROQ_API_KEY, LLM_MODEL
 
 
 GRADER_SYSTEM_PROMPT = """You are a strict relevance grader. Given a user query and a document chunk, \
-output ONLY a JSON object: {"relevant": true/false, "reason": "<10 words>"}. No other text."""
+output ONLY a JSON object: {"relevant": true/false, "reason": "<10 words"}. No other text."""
 
 
-def _get_llm() -> ChatGoogleGenerativeAI:
+def _get_llm() -> ChatGroq:
     """Get the grading LLM."""
-    return ChatGoogleGenerativeAI(
+    return ChatGroq(
         model=LLM_MODEL,
-        google_api_key=GOOGLE_API_KEY,
+        api_key=GROQ_API_KEY,
         temperature=0,
     )
 
@@ -51,7 +51,7 @@ def _parse_grade(response_text: str) -> dict:
         return {"relevant": True, "reason": "parse_error_fallback"}
 
 
-def grade_single(query: str, doc: Document, llm: ChatGoogleGenerativeAI) -> Document:
+def grade_single(query: str, doc: Document, llm: ChatGroq) -> Document:
     """Grade a single document for relevance to the query."""
     human_msg = f"Query: {query}\n\nDocument:\n{doc.page_content[:1500]}"
 
@@ -86,7 +86,7 @@ def grade_documents(
 
 
 async def _async_grade_single(
-    query: str, doc: Document, llm: ChatGoogleGenerativeAI
+    query: str, doc: Document, llm: ChatGroq
 ) -> Document:
     """Async wrapper for grading a single document."""
     human_msg = f"Query: {query}\n\nDocument:\n{doc.page_content[:1500]}"

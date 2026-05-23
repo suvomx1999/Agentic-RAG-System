@@ -8,6 +8,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const maxIterations = document.getElementById('max-iterations');
     const streamToggle = document.getElementById('stream-toggle');
     const vectorStatus = document.getElementById('vector-status');
+    const newChatBtn = document.getElementById('new-chat-btn');
+
+    // Generate a session ID for memory
+    let sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
 
     // Auto-resize textarea
     queryInput.addEventListener('input', function() {
@@ -54,6 +58,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     checkHealth();
     setInterval(checkHealth, 30000); // Check every 30s
+
+    // Handle New Chat
+    if (newChatBtn) {
+        newChatBtn.addEventListener('click', () => {
+            // Reset session
+            sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+            
+            // Clear UI
+            chatHistory.innerHTML = `
+                <div class="message assistant-message">
+                    <div class="avatar">✨</div>
+                    <div class="message-content">
+                        Hello! I am your Agentic RAG assistant. Ask me questions about the documents in our knowledge base, and I will intelligently retrieve, rerank, and grade information to give you the best answer.
+                    </div>
+                </div>
+            `;
+            traceContainer.innerHTML = '<div class="empty-state">No active query.</div>';
+            sourcesContainer.innerHTML = '<div class="empty-state">No sources retrieved yet.</div>';
+            
+            // Focus input
+            queryInput.value = '';
+            queryInput.focus();
+        });
+    }
 
     // Add message to chat
     function appendMessage(role, content, isMarkdown = false) {
@@ -166,20 +194,36 @@ document.addEventListener('DOMContentLoaded', () => {
             card.className = 'source-card';
             
             // Clean up source path for display
-            let displaySource = src.source || src.url || 'Unknown';
+            let displaySource = src.title || src.source || src.url || 'Unknown';
             if (displaySource.includes('/')) {
                 displaySource = displaySource.split('/').pop();
             }
 
+            const chunkContent = src.content || '';
+            const previewText = chunkContent.length > 150 
+                ? chunkContent.substring(0, 150) + '...' 
+                : chunkContent;
+
             card.innerHTML = `
                 <div class="source-title">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:2px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:2px;flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     ${displaySource}
                 </div>
                 <div class="source-meta">
                     <span>Chunk: ${src.chunk_index || 'N/A'}</span>
                     <span class="badge">[${idx + 1}]</span>
                 </div>
+                ${chunkContent ? `
+                <div class="chunk-preview" onclick="this.classList.toggle('expanded')">
+                    <div class="chunk-preview-label">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        <span>Preview chunk</span>
+                    </div>
+                    <div class="chunk-preview-text">
+                        <div class="chunk-short">${previewText}</div>
+                        <div class="chunk-full">${chunkContent}</div>
+                    </div>
+                </div>` : ''}
             `;
             sourcesContainer.appendChild(card);
         });
@@ -207,7 +251,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const requestBody = {
             query: query,
             max_iterations: maxIter,
-            stream: isStream
+            stream: isStream,
+            session_id: sessionId
         };
 
         if (isStream) {
@@ -228,58 +273,63 @@ document.addEventListener('DOMContentLoaded', () => {
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder("utf-8");
 
-                while (true) {
+                let buffer = '';
+                let streamDone = false;
+
+                while (!streamDone) {
                     const { done, value } = await reader.read();
                     if (done) break;
                     
-                    const chunk = decoder.decode(value, { stream: true });
-                    const lines = chunk.split('\n\n');
+                    buffer += decoder.decode(value, { stream: true });
+                    const parts = buffer.split('\n\n');
+                    // Keep the last part as it may be incomplete
+                    buffer = parts.pop() || '';
                     
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const dataStr = line.replace('data: ', '');
-                            try {
-                                const data = JSON.parse(dataStr);
-                                
-                                if (data.status === 'done') {
-                                    typingMsg.remove();
-                                    appendMessage('assistant', finalAnswer, true);
-                                    renderSources(sources);
-                                    break;
+                    for (const part of parts) {
+                        const line = part.trim();
+                        if (!line.startsWith('data: ')) continue;
+                        const dataStr = line.substring(6);
+                        try {
+                            const data = JSON.parse(dataStr);
+                            
+                            if (data.status === 'done') {
+                                typingMsg.remove();
+                                appendMessage('assistant', finalAnswer, true);
+                                if (data.sources && data.sources.length > 0) {
+                                    renderSources(data.sources);
+                                } else {
+                                    sourcesContainer.innerHTML = '<div class="empty-state">No sources used.</div>';
                                 }
-                                
-                                if (data.error) {
-                                    typingMsg.remove();
-                                    appendMessage('assistant', `⚠️ **Error:** ${data.error}`, true);
-                                    break;
-                                }
-
-                                if (data.node) {
-                                    addTrace(data.node, data.status, data.data);
-                                    
-                                    // Extract answer from generate node
-                                    if (data.node === 'generate' && data.status === 'complete') {
-                                        if (data.data && data.data.answer) {
-                                            finalAnswer = data.data.answer;
-                                        }
-                                    }
-                                    // Extract context from merge_context
-                                    if (data.node === 'merge_context' && data.status === 'complete') {
-                                        // The backend streams partial updates, so we can't get the full objects easily here
-                                        // But we update sources text to let user know
-                                        sourcesContainer.innerHTML = '<div class="empty-state" style="color:var(--success)">Context Merged. Generating answer...</div>';
-                                    }
-                                }
-                            } catch (e) {
-                                console.error("Error parsing SSE data", e);
+                                streamDone = true;
+                                break;
                             }
+                            
+                            if (data.error) {
+                                typingMsg.remove();
+                                appendMessage('assistant', `⚠️ **Error:** ${data.error}`, true);
+                                streamDone = true;
+                                break;
+                            }
+
+                            if (data.node) {
+                                addTrace(data.node, data.status, data.data);
+                                
+                                // Extract answer from generate node
+                                if (data.node === 'generate' && data.status === 'complete') {
+                                    if (data.data && data.data.answer) {
+                                        finalAnswer = data.data.answer;
+                                    }
+                                }
+                                // Extract context from merge_context
+                                if (data.node === 'merge_context' && data.status === 'complete') {
+                                    sourcesContainer.innerHTML = '<div class="empty-state" style="color:var(--success)">Context Merged. Generating answer...</div>';
+                                }
+                            }
+                        } catch (e) {
+                            console.error("Error parsing SSE data", e);
                         }
                     }
                 }
-                
-                // After stream ends, we can do a quick fetch to get structured sources if needed, 
-                // but since the endpoint returns final state, we might need a separate endpoint. 
-                // For now, we rely on inline citations.
 
             } catch (err) {
                 typingMsg.remove();

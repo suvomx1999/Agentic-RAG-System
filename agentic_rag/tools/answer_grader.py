@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from langchain_core.documents import Document
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from agentic_rag.config import GOOGLE_API_KEY, LLM_MODEL
+from agentic_rag.config import GROQ_API_KEY, LLM_MODEL
 
 
 # ── Data Classes ──────────────────────────────────────────────────────────────
@@ -51,10 +51,10 @@ Output ONLY JSON: {"grounded": true/false, "unsupported_claims": ["list of unsup
 No other text."""
 
 
-def _get_llm() -> ChatGoogleGenerativeAI:
-    return ChatGoogleGenerativeAI(
+def _get_llm() -> ChatGroq:
+    return ChatGroq(
         model=LLM_MODEL,
-        google_api_key=GOOGLE_API_KEY,
+        api_key=GROQ_API_KEY,
         temperature=0,
     )
 

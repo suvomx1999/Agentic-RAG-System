@@ -10,19 +10,19 @@ from typing import List
 
 import structlog
 from langchain_core.documents import Document
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from agentic_rag.config import GOOGLE_API_KEY, LLM_MODEL
+from agentic_rag.config import GROQ_API_KEY, LLM_MODEL
 from agentic_rag.agents.state import AgentState
 
 logger = structlog.get_logger(__name__)
 
 
-def _get_llm() -> ChatGoogleGenerativeAI:
-    return ChatGoogleGenerativeAI(
+def _get_llm() -> ChatGroq:
+    return ChatGroq(
         model=LLM_MODEL,
-        google_api_key=GOOGLE_API_KEY,
+        api_key=GROQ_API_KEY,
         temperature=0,
     )
 
@@ -37,12 +37,13 @@ def analyze_query(state: AgentState) -> dict:
     - Complex (multi-hop, >15 words): should_retrieve=True, strategy='hyde'
     """
     query = state["query"]
+    history = state.get("chat_history", [])
     word_count = len(query.split())
 
-    logger.info("analyze_query", query=query, word_count=word_count)
+    logger.info("analyze_query", query=query, word_count=word_count, history_len=len(history))
 
-    if word_count < 5:
-        # Simple query — try direct answer without retrieval
+    if word_count < 5 and not history:
+        # Simple standalone query — try direct answer without retrieval
         return {
             "should_retrieve": False,
             "rewrite_strategy": None,
@@ -203,10 +204,13 @@ Format citations as [Source: filename] inline."""
 
 def generate(state: AgentState) -> dict:
     """Generate an answer using the final context. Increments iterations."""
+    from langchain_core.messages import AIMessage
+    
     llm = _get_llm()
     query = state["query"]
     context_docs = state.get("final_context", [])
     iterations = state.get("iterations", 0)
+    history = state.get("chat_history", [])
 
     # Build context string
     if context_docs:
@@ -217,12 +221,22 @@ def generate(state: AgentState) -> dict:
     else:
         context = "No context documents available."
 
-    logger.info("generate", num_context=len(context_docs), iteration=iterations + 1)
+    logger.info("generate", num_context=len(context_docs), iteration=iterations + 1, history_len=len(history))
 
-    response = llm.invoke([
-        SystemMessage(content=GENERATE_SYSTEM),
-        HumanMessage(content=f"Context:\n{context}\n\nQuestion: {query}"),
-    ])
+    # Construct messages with history
+    messages = [SystemMessage(content=GENERATE_SYSTEM)]
+    
+    # Add history
+    for msg in history:
+        if msg.get("role") == "user":
+            messages.append(HumanMessage(content=msg.get("content", "")))
+        elif msg.get("role") == "assistant":
+            messages.append(AIMessage(content=msg.get("content", "")))
+            
+    # Add current query
+    messages.append(HumanMessage(content=f"Context:\n{context}\n\nQuestion: {query}"))
+
+    response = llm.invoke(messages)
 
     return {
         "answer": response.content,

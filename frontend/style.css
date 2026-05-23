@@ -234,6 +234,8 @@ input:checked + .slider:before {
     flex-direction: column;
     background-color: var(--bg-main);
     position: relative;
+    min-width: 0;
+    overflow-x: hidden;
 }
 
 .chat-header {
@@ -274,6 +276,7 @@ input:checked + .slider:before {
     max-width: 800px;
     margin: 0 auto;
     width: 100%;
+    min-width: 0;
 }
 
 .message.user-message {
@@ -309,6 +312,12 @@ input:checked + .slider:before {
     font-size: 15px;
     line-height: 1.6;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-x: hidden;
 }
 
 .user-message .message-content {
@@ -531,6 +540,72 @@ textarea {
     border-radius: 4px;
     font-size: 10px;
     font-weight: 600;
+}
+
+/* Chunk Preview */
+.chunk-preview {
+    margin-top: 8px;
+    cursor: pointer;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 8px;
+}
+
+.chunk-preview-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.chunk-preview-label svg {
+    transition: transform 0.3s ease;
+}
+
+.chunk-preview.expanded .chunk-preview-label svg {
+    transform: rotate(180deg);
+}
+
+.chunk-preview-text {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.chunk-preview .chunk-full {
+    display: none;
+}
+
+.chunk-preview .chunk-short {
+    display: block;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.chunk-preview.expanded .chunk-short {
+    display: none;
+}
+
+.chunk-preview.expanded .chunk-full {
+    display: block;
+    max-height: 300px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Collapsed state: show short preview */
+.chunk-preview:not(.expanded) .chunk-short {
+    max-height: 60px;
 }
 
 /* Animations */

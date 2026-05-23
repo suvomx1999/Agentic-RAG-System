@@ -43,8 +43,11 @@ class AgentState(TypedDict):
     is_sufficient: bool                         # Whether answer is good enough
     error: Optional[str]                        # Error message if any
 
+    # ── Conversation Memory ───────────────────────────────────────────────
+    chat_history: List[dict]                    # Past messages [{role, content}]
 
-def init_state(query: str) -> AgentState:
+
+def init_state(query: str, chat_history: Optional[List[dict]] = None) -> AgentState:
     """Factory function to create an initialized AgentState.
 
     All optional fields default to None, lists to [], and control
@@ -69,4 +72,5 @@ def init_state(query: str) -> AgentState:
         should_retrieve=True,
         is_sufficient=False,
         error=None,
+        chat_history=chat_history or [],
     )

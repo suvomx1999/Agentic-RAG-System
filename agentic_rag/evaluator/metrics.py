@@ -1,6 +1,6 @@
 """RAGAS metrics configuration for evaluation.
 
-Configures Gemini as the evaluator LLM using RAGAS 0.2 patterns.
+Configures Groq as the evaluator LLM using RAGAS 0.2 patterns.
 Groups metrics into retrieval, generation, and end-to-end categories.
 """
 
@@ -9,23 +9,22 @@ from __future__ import annotations
 import os
 from typing import List
 
-from agentic_rag.config import GOOGLE_API_KEY, EVAL_LLM_MODEL
+from agentic_rag.config import GROQ_API_KEY, EVAL_LLM_MODEL
 
 
 # ── LLM & Embeddings Setup ───────────────────────────────────────────────────
 
 def get_evaluator_llm():
-    """Get the RAGAS evaluator LLM (Gemini via llm_factory)."""
-    from ragas.llms import llm_factory
-    from google import genai
+    """Get the RAGAS evaluator LLM (Groq via LangChain wrapper)."""
+    from ragas.llms import LangchainLLMWrapper
+    from langchain_groq import ChatGroq
 
-    client = genai.Client(api_key=GOOGLE_API_KEY)
-    evaluator_llm = llm_factory(
-        EVAL_LLM_MODEL,
-        provider="google",
-        client=client,
+    groq_llm = ChatGroq(
+        model=EVAL_LLM_MODEL,
+        api_key=GROQ_API_KEY,
+        temperature=0,
     )
-    return evaluator_llm
+    return LangchainLLMWrapper(groq_llm)
 
 
 def get_evaluator_embeddings():
@@ -45,7 +44,7 @@ def get_evaluator_embeddings():
 # ── Metric Initialization ────────────────────────────────────────────────────
 
 def _init_metrics():
-    """Initialize all 6 RAGAS metrics with Gemini evaluator."""
+    """Initialize all 6 RAGAS metrics with Groq evaluator."""
     from ragas.metrics import (
         LLMContextPrecisionWithoutReference,
         LLMContextRecall,

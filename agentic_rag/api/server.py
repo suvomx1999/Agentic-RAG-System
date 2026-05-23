@@ -78,12 +78,14 @@ class QueryRequest(BaseModel):
     query: str
     max_iterations: int = 3
     stream: bool = False
+    session_id: Optional[str] = None
 
 
 class SourceInfo(BaseModel):
     title: Optional[str] = None
     url: Optional[str] = None
     chunk_index: Optional[str] = None
+    content: Optional[str] = None
 
 
 class GradeInfo(BaseModel):
@@ -137,11 +139,11 @@ async def health():
 
     # Check LLM reachability
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        from agentic_rag.config import GOOGLE_API_KEY, LLM_MODEL
-        llm = ChatGoogleGenerativeAI(
+        from langchain_groq import ChatGroq
+        from agentic_rag.config import GROQ_API_KEY, LLM_MODEL
+        llm = ChatGroq(
             model=LLM_MODEL,
-            google_api_key=GOOGLE_API_KEY,
+            api_key=GROQ_API_KEY,
         )
         resp = llm.invoke("ping")
         llm_ok = bool(resp.content)
@@ -156,22 +158,38 @@ async def health():
     }
 
 
+# ── Memory Store ──────────────────────────────────────────────────────────────
+# In-memory session store for chat history (in a real app, use Redis/DB)
+_sessions: dict[str, list[dict]] = {}
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
 @app.post("/query", response_model=QueryResponse)
-@limiter.limit("10/minute")
+@limiter.limit("20/minute")
 async def query_endpoint(request: Request, body: QueryRequest):
-    """Process a RAG query and return structured response."""
+    """Process a single query synchronously through the LangGraph."""
     graph = get_graph()
-    state = init_state(body.query)
+    
+    # Get or initialize session history
+    session_id = body.session_id or "default"
+    history = _sessions.get(session_id, [])
+    
+    state = init_state(body.query, chat_history=history)
     state["max_iterations"] = body.max_iterations
 
     try:
         final_state = graph.invoke(state)
+        
+        # Update session memory if answer generated
+        if final_state.get("answer"):
+            history.append({"role": "user", "content": body.query})
+            history.append({"role": "assistant", "content": final_state["answer"]})
+            # Keep only last 10 messages to prevent context overflow
+            _sessions[session_id] = history[-10:]
+            
     except Exception as e:
-        logger.error("query_failed", error=str(e))
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e)},
-        )
+        logger.error("query_error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
     # Extract sources from final_context
     sources = []
@@ -180,6 +198,7 @@ async def query_endpoint(request: Request, body: QueryRequest):
             title=doc.metadata.get("title", doc.metadata.get("source", "")),
             url=doc.metadata.get("source", ""),
             chunk_index=str(doc.metadata.get("chunk_index", "")),
+            content=doc.page_content[:500] if doc.page_content else None,
         ))
 
     # Extract grade info
@@ -205,47 +224,63 @@ async def stream_endpoint(request: Request, body: QueryRequest):
     import json
 
     graph = get_graph()
-    state = init_state(body.query)
+    
+    # Get or initialize session history
+    session_id = body.session_id or "default"
+    history = _sessions.get(session_id, [])
+    
+    state = init_state(body.query, chat_history=history)
     state["max_iterations"] = body.max_iterations
 
     async def event_generator():
         try:
-            async for event in graph.astream_events(state, version="v2"):
-                kind = event.get("event", "")
-                name = event.get("name", "")
-
-                # Stream node start/end events
-                if kind == "on_chain_start" and name in [
-                    "analyze_query", "rewrite_query", "retrieve",
-                    "rerank", "grade_documents", "web_search_fallback",
-                    "merge_context", "generate", "grade_answer",
-                ]:
-                    data = json.dumps({"node": name, "status": "started"})
+            final_state = None
+            async for step in graph.astream(state, stream_mode="updates"):
+                for node_name, node_output in step.items():
+                    # Send node started
+                    data = json.dumps({"node": node_name, "status": "started"})
                     yield f"data: {data}\n\n"
 
-                elif kind == "on_chain_end" and name in [
-                    "analyze_query", "rewrite_query", "retrieve",
-                    "rerank", "grade_documents", "web_search_fallback",
-                    "merge_context", "generate", "grade_answer",
-                ]:
-                    output = event.get("data", {}).get("output", {})
-                    # Only send serializable data
+                    # Build safe output (only serializable values)
                     safe_output = {}
-                    if isinstance(output, dict):
-                        for k, v in output.items():
+                    if isinstance(node_output, dict):
+                        for k, v in node_output.items():
                             if isinstance(v, (str, int, float, bool, type(None))):
                                 safe_output[k] = v
                             elif isinstance(v, list):
                                 safe_output[k] = f"[{len(v)} items]"
 
+                    # Send node complete
                     data = json.dumps({
-                        "node": name,
+                        "node": node_name,
                         "status": "complete",
                         "data": safe_output,
                     })
                     yield f"data: {data}\n\n"
 
-            yield f"data: {json.dumps({'status': 'done'})}\n\n"
+                    # Track final state updates
+                    if final_state is None:
+                        final_state = {}
+                    final_state.update(node_output)
+
+            # Extract sources from final state
+            sources = []
+            if final_state:
+                for doc in final_state.get("final_context", []):
+                    sources.append({
+                        "title": doc.metadata.get("title", doc.metadata.get("source", "")),
+                        "url": doc.metadata.get("source", ""),
+                        "chunk_index": str(doc.metadata.get("chunk_index", "")),
+                        "content": doc.page_content[:500] if doc.page_content else "",
+                    })
+
+            # Update session memory if answer generated
+            if final_state and final_state.get("answer"):
+                history.append({"role": "user", "content": body.query})
+                history.append({"role": "assistant", "content": final_state["answer"]})
+                _sessions[session_id] = history[-10:]
+
+            yield f"data: {json.dumps({'status': 'done', 'sources': sources})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
